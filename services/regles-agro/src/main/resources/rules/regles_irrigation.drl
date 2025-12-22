@@ -1,0 +1,22 @@
+package rules;
+
+// On importe tes objets pour que Drools les comprenne
+import com.agrotrace.reglesagro.model.DonneesParcelle;
+import com.agrotrace.reglesagro.model.Recommandation;
+
+// Règle 1 : Cas critique (Exemple du cahier des charges)
+rule "Irrigation Urgente - Chaleur et Sécheresse"
+    when
+        // SI : Il existe des données de parcelle...
+        parcelle : DonneesParcelle(
+            humiditeSol < 20,
+            temperature > 30
+        )
+        // ... ET qu'on n'a pas encore fait de recommandation
+        recommandation : Recommandation()
+    then
+        // ALORS : On remplit l'objet recommandation
+        recommandation.setAction("IRRIGATION URGENTE");
+        recommandation.setExplication("Alerte critique : Humidité du sol inférieure à 20% (" + parcelle.getHumiditeSol() + "%) et température élevée (" + parcelle.getTemperature() + "°C). Risque de stress hydrique immédiat.");
+        System.out.println("Règle déclenchée : Irrigation Urgente");
+end

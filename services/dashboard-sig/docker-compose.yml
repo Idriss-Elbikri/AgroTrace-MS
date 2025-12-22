@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Dashboard SIG - Interface cartographique
+  dashboard-sig:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agrotrace-dashboard-sig
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080
+    networks:
+      - agrotrace-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL/PostGIS (optionnel - si stockage local nécessaire)
+  # postgis:
+  #   image: postgis/postgis:15-3.3
+  #   container_name: agrotrace-postgis
+  #   environment:
+  #     POSTGRES_DB: agrotrace_sig
+  #     POSTGRES_USER: agrotrace
+  #     POSTGRES_PASSWORD: agrotrace_secret
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgis_data:/var/lib/postgresql/data
+  #   networks:
+  #     - agrotrace-network
+  #   restart: unless-stopped
+
+networks:
+  agrotrace-network:
+    driver: bridge
+    name: agrotrace-network
+
+# volumes:
+#   postgis_data:

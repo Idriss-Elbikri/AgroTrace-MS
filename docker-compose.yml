@@ -1,0 +1,256 @@
+version: '3.8'
+
+networks:
+  agrotrace-network:
+    driver: bridge
+
+services:
+  # --- INFRASTRUCTURE ---
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: agro_timescaledb
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=adminpassword
+      - POSTGRES_DB=agro_timeseries
+    ports:
+      - "5432:5432"
+    networks:
+      - agrotrace-network
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      # ICI : On injecte le script SQL pour créer les tables automatiquement
+      - ./infra/timescale/init.sql:/docker-entrypoint-initdb.d/001_init.sql
+
+  postgis:
+    image: postgis/postgis:14-3.3
+    container_name: agro_postgis
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=adminpassword
+      - POSTGRES_DB=agro_business
+    ports:
+      - "5433:5432"
+    networks:
+      - agrotrace-network
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    container_name: agro_minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - agrotrace-network
+    volumes:
+      - minio_data:/data
+
+  zookeeper:
+    # Avant : image: confluentinc/cp-zookeeper:latest
+    # Après :
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: agro_zookeeper
+    # ... le reste ne change pas
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    networks:
+      - agrotrace-network
+
+  kafka:
+    # Avant : image: confluentinc/cp-kafka:latest
+    # Après :
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: agro_kafka
+    # ... le reste ne change pas
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      # Configuration interne (29092) et externe (9092)
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    networks:
+      - agrotrace-network
+
+  # --- MICROSERVICES REELS ---
+
+  # 1. API Ingestion (Reçoit les données HTTP -> Kafka)
+  ingestion-api:
+    build: 
+      context: ./services/ingestion-capteurs
+      dockerfile: Dockerfile
+    container_name: agro_ingestion_api
+    ports:
+      - "8000:8000"  # Ouvre la fenêtre vers Windows
+    environment:
+      # On force la config pour correspondre à notre infra
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - DB_HOST=timescaledb
+      - DB_NAME=agro_timeseries
+      - DB_USER=admin
+      - DB_PASS=adminpassword
+    networks:
+      - agrotrace-network
+    depends_on:
+      - kafka
+      - timescaledb
+
+  # 2. Worker Ingestion (Lit Kafka -> TimescaleDB)
+  ingestion-worker:
+    build:
+      context: ./services/ingestion-capteurs
+      dockerfile: consumer/Dockerfile
+    container_name: agro_ingestion_worker
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - DB_HOST=timescaledb
+      - DB_NAME=agro_timeseries
+      - DB_USER=admin
+      - DB_PASS=adminpassword
+    networks:
+      - agrotrace-network
+    depends_on:
+      - kafka
+      - timescaledb
+
+  # --- GATEWAY ---
+  nginx:
+    image: nginx:latest
+    container_name: agro_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - agrotrace-network
+    depends_on:
+      - ingestion-api  # NGINX attend maintenant la vraie API
+
+  # --- MOCKS RESTANTS (En attendant les autres collègues) ---
+  
+  vision-plante:
+    build:
+      context: ./services/vision_plante
+      dockerfile: Dockerfile
+    container_name: agro_vision_plante
+    ports:
+      - "8001:8000" # ATTENTION : On mappe sur 8001 car 8000 est déjà pris par ingestion-api
+    networks:
+      - agrotrace-network
+    volumes:
+      - ./services/vision_plante/models:/app/models # Pour changer le modèle sans rebuild
+    depends_on:
+      - minio # Il a besoin de MinIO pour stocker les images
+
+  reco-irrigation:
+    build:
+      context: ./services/reco_irrigation
+      dockerfile: Dockerfile
+    container_name: agro_reco_irrigation
+    ports:
+      - "8002:8000"  # API accessible sur http://localhost:8002
+    environment:
+      # Format: postgresql://USER:PASSWORD@HOST:PORT/DB_NAME
+      # On utilise le service "postgis" défini plus haut dans l'infra
+      - DATABASE_URL=postgresql://admin:adminpassword@postgis:5432/agro_business
+    networks:
+      - agrotrace-network
+    depends_on:
+      - postgis # Il ne peut pas démarrer sans la DB
+
+  dashboard-sig:
+    build:
+      context: ./services/dashboard-sig
+      dockerfile: Dockerfile
+    container_name: agro_dashboard
+    ports:
+      - "3000:3000" # Accessible sur http://localhost:3000
+    networks:
+      - agrotrace-network
+    # Pas besoin de volumes pour le code ici car c'est un build de production (statique)
+    # Si tu veux développer en direct, la config serait différente, mais pour la prod c'est parfait.
+
+  prevision-eau:
+    build:
+      context: ./services/prevision_eau
+      dockerfile: Dockerfile
+    container_name: agro_prevision_eau
+    environment:
+      - DB_HOST=timescaledb
+      - DB_NAME=agro_timeseries
+      - DB_USER=admin
+      - DB_PASS=adminpassword
+    networks:
+      - agrotrace-network
+    depends_on:
+      - timescaledb # Attend que TimescaleDB soit prêt
+
+  # 7. Service Moteur de Règles (Spring Boot + Drools)
+  regles-agro:
+    build:
+      context: ./services/regles-agro
+      dockerfile: Dockerfile
+    container_name: agro_regles
+    ports:
+      - "8083:8081" # On mappe le port interne 8081 vers 8083 sur Windows
+    environment:
+      # On écrase la config du application.properties pour Docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgis:5432/agro_business
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=adminpassword
+      # Pour que Spring attende que la DB soit prête
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    networks:
+      - agrotrace-network
+    depends_on:
+      - postgis
+
+
+  # 8. Service Prétraitement (Nettoyage Données + Images UAV)
+  pretraitement:
+    build:
+      context: ./services/pretraitement
+      dockerfile: Dockerfile
+    container_name: agro_pretraitement
+    ports:
+      - "8004:8001" # Mappe le port interne 8001 vers 8004 sur Windows
+    environment:
+      # --- Configuration Database (TimescaleDB) ---
+      # On aligne avec les credentials de ton infra existante
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_USER=admin
+      - TIMESCALE_PASSWORD=adminpassword
+      - TIMESCALE_DB=agro_timeseries
+
+      # --- Configuration MinIO ---
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=False
+
+      # --- Configuration Kafka ---
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - agrotrace-network
+    depends_on:
+      - timescaledb
+      - minio
+      - kafka
+
+volumes:
+  timescaledb_data:
+  postgis_data:
+  minio_data:

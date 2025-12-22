@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+aiokafka
+psycopg2-binary
+sqlalchemy
+alembic
+asyncpg

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# VS Code
+.vscode/
+
+# Docker (si tu as des dossiers de données mappés localement)
+*.log
+infra/data/
+postgres_data/
+minio_data/
+
+# OS specific
+.DS_Store
+Thumbs.db*.pth
