@@ -2,7 +2,8 @@
 
 const API_CONFIG = {
   // URL de base des microservices (à adapter selon l'environnement)
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+  // BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost",
 
   // Endpoints des différents microservices
   ENDPOINTS: {
