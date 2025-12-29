@@ -3,25 +3,27 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# --- CONFIGURATION DYNAMIQUE ---
-# Explication : 
-# 1. os.getenv("DATABASE_URL") cherche une configuration venant de Docker Compose.
-# 2. Si elle n'existe pas (ex: test local dans VS Code), on utilise le lien par défaut vers localhost:5434.
+# --- CONFIGURATION DE LA CONNEXION ---
+# Explication des paramètres :
+# - admin:adminpassword -> Utilisateur et mot de passe définis dans docker-compose
+# - agro_postgis -> Nom du conteneur Docker de la base de données
+# - 5432 -> Port interne du réseau Docker
+# - agro_business -> Nom de la base de données spatiale
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres:password@localhost:5434/agrotrace_db"
+    "postgresql://admin:adminpassword@agro_postgis:5432/agro_business"
 )
 
-# Création du moteur
+# Création du moteur SQLAlchemy pour PostgreSQL
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
-# Création de la session
+# Configuration de la session (utilisée par FastAPI)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Classe de base pour les modèles
+# Classe de base pour les modèles ORM
 Base = declarative_base()
 
-# Dépendance pour récupérer la DB dans les routes
+# Dépendance pour injecter la session de base de données dans les routes API
 def get_db():
     db = SessionLocal()
     try:

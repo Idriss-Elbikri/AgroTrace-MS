@@ -1,6 +1,6 @@
 import pandas as pd
 from prophet import Prophet
-from database import get_sensor_data
+from app.database import get_sensor_data
 import logging
 
 # On rend Prophet un peu moins bavard dans la console

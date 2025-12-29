@@ -1,34 +1,26 @@
+# Étape 1 : Build de l'application (Node.js)
 FROM node:18-alpine AS builder
-
 WORKDIR /app
-
-# Copie des fichiers package
 COPY package*.json ./
-
-# Installation des dépendances
-RUN npm ci
-
-# Copie du code source
+# Utilisation de npm install pour garantir la présence de toutes les dépendances
+RUN npm install
 COPY . .
-
-# Build de l'application React
 RUN npm run build
 
-# Image de production avec nginx
+# Étape 2 : Serveur de production (Nginx)
 FROM nginx:alpine
-
-# Copie de la configuration nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copie du build Vite (dist au lieu de build)
+# On copie le build Vite (dossier dist) dans le dossier public de Nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Exposition du port
-EXPOSE 3000
+# Important : On crée une config Nginx minimale interne pour écouter sur le port 80
+RUN echo 'server { \
+    listen 80; \
+    location / { \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    try_files $uri $uri/ /index.html; \
+    } \
+    }' > /etc/nginx/conf.d/default.conf
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
-
-# Démarrage de nginx
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

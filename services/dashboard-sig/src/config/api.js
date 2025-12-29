@@ -1,46 +1,41 @@
-// Configuration des endpoints API des microservices AgroTrace
+/**
+ * Configuration des endpoints API pour le Dashboard SIG AgroTrace.
+ * Toutes les requêtes passent par la Gateway Nginx (localhost:80).
+ */
 
 const API_CONFIG = {
-  // URL de base des microservices (à adapter selon l'environnement)
-  // BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+  // URL de base pointant vers Nginx
   BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost",
 
-  // Endpoints des différents microservices
+  // Endpoints correspondant aux règles de routage définies dans nginx.conf
   ENDPOINTS: {
-    // Microservice Parcelles
+    // Microservice Parcelles (via microservice reco_irrigation)
     PARCELLES: {
       BASE: "/api/parcelles",
-      GET_ALL: "/api/parcelles",
-      GET_BY_ID: (id) => `/api/parcelles/${id}`,
       GET_GEOJSON: "/api/parcelles/geojson",
+      GET_BY_ID: (id) => `/api/parcelles/${id}`,
     },
 
-    // Microservice Prévisions Météo
-    PREVISIONS: {
-      BASE: "/api/previsions",
-      GET_BY_PARCELLE: (parcelleId) => `/api/previsions/parcelle/${parcelleId}`,
-      GET_CURRENT: "/api/previsions/current",
+    // Microservice Irrigation & Recommandations (via microservice reco_irrigation)
+    // FIX : Pointe vers /api/parcelle/ pour éviter le retour HTML de Nginx
+    IRRIGATION: {
+      BASE: "/api/parcelle",
+      GET_BY_PARCELLE: (id) => `/api/parcelle/${id}`,
+      GET_RECOMMENDATIONS: "/api/parcelle/all",
     },
 
-    // Microservice Vision (analyse d'images)
+    // Microservice Vision (analyse d'images UAV)
     VISION: {
       BASE: "/api/vision",
+      GET_BY_PARCELLE: (id) => `/api/vision/${id}`,
       GET_RESULTS: "/api/vision/results",
-      GET_BY_PARCELLE: (parcelleId) => `/api/vision/parcelle/${parcelleId}`,
     },
 
-    // Microservice Irrigation
-    IRRIGATION: {
-      BASE: "/api/irrigation",
-      GET_RECOMMENDATIONS: "/api/irrigation/recommendations",
-      GET_BY_PARCELLE: (parcelleId) => `/api/irrigation/parcelle/${parcelleId}`,
-    },
-
-    // Microservice Cultures
-    CULTURES: {
-      BASE: "/api/cultures",
-      GET_ALL: "/api/cultures",
-      GET_BY_PARCELLE: (parcelleId) => `/api/cultures/parcelle/${parcelleId}`,
+    // Microservice Prévisions (LSTM / Prophet)
+    PREVISIONS: {
+      BASE: "/api/previsions",
+      GET_BY_PARCELLE: (id) => `/api/previsions/${id}`,
+      GET_CURRENT: "/api/previsions/current",
     },
   },
 };

@@ -20,3 +20,15 @@ minio_data/
 # OS specific
 .DS_Store
 Thumbs.db*.pth
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Modèles IA lourds
+services/vision_plante/models/*.pth
+
+# Docker volumes locaux
+*_data/

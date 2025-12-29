@@ -2,7 +2,8 @@ pandas
 numpy
 sqlalchemy
 psycopg2-binary
-torch
 prophet
 python-dotenv
 scikit-learn
+fastapi
+uvicorn

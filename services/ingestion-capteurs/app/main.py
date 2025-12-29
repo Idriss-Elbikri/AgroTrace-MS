@@ -1,116 +1,64 @@
 from fastapi import FastAPI, HTTPException
-from .schemas import SensorData
-from .kafka_producer import send_to_kafka
-from .config import TOPIC_MAP
+from contextlib import asynccontextmanager
+import asyncio
+import json
 import os
-import asyncpg
+import logging
+from aiokafka import AIOKafkaProducer
+from .schemas import SensorData
+from .config import TOPIC_MAP
 
-app = FastAPI(title="IngestionCapteurs API")
+# --- LOGS ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("IngestionAPI")
 
-DB_HOST = os.getenv("DB_HOST", "timescaledb")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "123456")
-DB_NAME = os.getenv("DB_NAME", "sensors")
+# --- CONFIG ---
+KAFKA_SERVER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+producer = None
 
-async def get_db_connection():
-    return await asyncpg.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASS,
-        database=DB_NAME
+# --- DEMARRAGE ROBUSTE ---
+async def start_kafka():
+    global producer
+    logger.info(f"🔌 Connexion Kafka sur {KAFKA_SERVER}...")
+    temp_producer = AIOKafkaProducer(
+        bootstrap_servers=KAFKA_SERVER,
+        value_serializer=lambda v: json.dumps(v).encode('utf-8')
     )
+    for i in range(15):
+        try:
+            await temp_producer.start()
+            producer = temp_producer
+            logger.info("✅ Kafka Connecté !")
+            return
+        except Exception:
+            logger.warning(f"⏳ Kafka non prêt (Essai {i+1})...")
+            await asyncio.sleep(2)
+    logger.error("❌ Kafka inaccessible.")
 
-@app.post("/ingest")
-async def ingest_data(payload: SensorData):
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(start_kafka())
+    yield
+    if producer: await producer.stop()
 
-    # Validate topic
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+def health():
+    return {"status": "ok", "kafka": "connected" if producer else "waiting"}
+
+@app.post("/")
+async def ingest(payload: SensorData):
     if payload.type not in TOPIC_MAP:
-        raise HTTPException(status_code=400, detail="Unknown sensor type")
+        raise HTTPException(400, "Type inconnu")
+    
+    if not producer:
+        return {"status": "error", "detail": "Kafka pas encore prêt"}
 
-    topic = TOPIC_MAP[payload.type]
-
-    message = payload.dict()
-    message["timestamp"] = payload.timestamp.isoformat()
-
-    # Send to Kafka
-    await send_to_kafka(topic, message)
-
-    return {"status": "ok", "topic": topic}
-
-@app.get("/ingested_types")
-async def get_ingested_types():
-    return {"types": list(TOPIC_MAP.keys())}
-
-@app.get("/data")
-async def get_all_data(limit: int = 100, sensor_type: str | None = None, sensor_id: str | None = None):
-    """Récupérer les données depuis TimescaleDB avec filtres optionnels"""
-    conn = await get_db_connection()
     try:
-        query = "SELECT * FROM sensor_readings WHERE 1=1"
-        params = []
-        
-        if sensor_type:
-            params.append(sensor_type)
-            query += f" AND sensor_type = ${len(params)}"
-        
-        if sensor_id:
-            params.append(sensor_id)
-            query += f" AND sensor_id = ${len(params)}"
-        
-        query += f" ORDER BY observed_at DESC LIMIT {limit}"
-        
-        rows = await conn.fetch(query, *params)
-        
-        return {
-            "count": len(rows),
-            "data": [dict(row) for row in rows]
-        }
-    finally:
-        await conn.close()
-
-@app.get("/data/latest")
-async def get_latest_readings():
-    """Récupérer les dernières lectures par capteur"""
-    conn = await get_db_connection()
-    try:
-        query = """
-            SELECT DISTINCT ON (sensor_id) 
-                sensor_id, sensor_type, value, observed_at, metadata
-            FROM sensor_readings
-            ORDER BY sensor_id, observed_at DESC
-        """
-        rows = await conn.fetch(query)
-        
-        return {
-            "count": len(rows),
-            "sensors": [dict(row) for row in rows]
-        }
-    finally:
-        await conn.close()
-
-@app.get("/data/stats")
-async def get_stats():
-    """Statistiques globales"""
-    conn = await get_db_connection()
-    try:
-        stats_query = """
-            SELECT 
-                sensor_type,
-                COUNT(*) as total_readings,
-                AVG(value) as avg_value,
-                MIN(value) as min_value,
-                MAX(value) as max_value,
-                MAX(observed_at) as last_reading
-            FROM sensor_readings
-            GROUP BY sensor_type
-        """
-        rows = await conn.fetch(stats_query)
-        
-        return {
-            "stats": [dict(row) for row in rows]
-        }
-    finally:
-        await conn.close()
-
+        msg = payload.dict()
+        msg["timestamp"] = payload.timestamp.isoformat()
+        await producer.send(TOPIC_MAP[payload.type], msg)
+        return {"status": "envoyé"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}

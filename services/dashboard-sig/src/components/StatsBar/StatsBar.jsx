@@ -18,15 +18,16 @@ function StatsBar({ stats }) {
           <span className="stat-label">Parcelles</span>
         </div>
       </div>
-      
+
       <div className="stat-item">
         <span className="stat-icon">📐</span>
         <div className="stat-content">
-          <span className="stat-value">{defaultStats.surfaceTotale}</span>
+          {/* FIX : Arrondi à 2 chiffres après la virgule */}
+          <span className="stat-value">{Number(defaultStats.surfaceTotale).toFixed(2)}</span>
           <span className="stat-label">Hectares</span>
         </div>
       </div>
-      
+
       <div className="stat-item stat-warning">
         <span className="stat-icon">⚠️</span>
         <div className="stat-content">
@@ -34,7 +35,7 @@ function StatsBar({ stats }) {
           <span className="stat-label">État critique</span>
         </div>
       </div>
-      
+
       <div className="stat-item stat-danger">
         <span className="stat-icon">💧</span>
         <div className="stat-content">

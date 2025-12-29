@@ -1,6 +1,7 @@
 import './Header.css';
 
-function Header({ onFilterChange, filters }) {
+// AJOUT : onRefresh et onExport dans les arguments de la fonction
+function Header({ onFilterChange, filters, onRefresh, onExport }) {
   return (
     <header className="dashboard-header">
       <div className="header-brand">
@@ -8,45 +9,45 @@ function Header({ onFilterChange, filters }) {
         <h1>AgroTrace SIG</h1>
         <span className="brand-subtitle">Dashboard Cartographique</span>
       </div>
-      
+
       <div className="header-filters">
         <div className="filter-group">
           <label htmlFor="filter-culture">Culture</label>
-          <select 
+          <select
             id="filter-culture"
-            value={filters?.culture || ''} 
+            value={filters?.culture || ''}
             onChange={(e) => onFilterChange?.('culture', e.target.value)}
           >
             <option value="">Toutes</option>
-            <option value="ble">Blé</option>
-            <option value="mais">Maïs</option>
-            <option value="olivier">Olivier</option>
-            <option value="agrumes">Agrumes</option>
-            <option value="tomate">Tomate</option>
+            <option value="Blé">Blé</option>
+            <option value="Maïs">Maïs</option>
+            <option value="Olivier">Olivier</option>
+            <option value="Agrumes">Agrumes</option>
+            <option value="Tomate">Tomate</option>
           </select>
         </div>
-        
+
         <div className="filter-group">
           <label htmlFor="filter-etat">État</label>
-          <select 
+          <select
             id="filter-etat"
-            value={filters?.etat || ''} 
+            value={filters?.etat || ''}
             onChange={(e) => onFilterChange?.('etat', e.target.value)}
           >
             <option value="">Tous</option>
-            <option value="excellent">Excellent</option>
-            <option value="bon">Bon</option>
-            <option value="moyen">Moyen</option>
-            <option value="attention">Attention</option>
-            <option value="critique">Critique</option>
+            <option value="Excellent">Excellent</option>
+            <option value="Bon">Bon</option>
+            <option value="Moyen">Moyen</option>
+            <option value="Attention">Attention</option>
+            <option value="Critique">Critique</option>
           </select>
         </div>
-        
+
         <div className="filter-group">
           <label htmlFor="filter-irrigation">Irrigation</label>
-          <select 
+          <select
             id="filter-irrigation"
-            value={filters?.irrigation || ''} 
+            value={filters?.irrigation || ''}
             onChange={(e) => onFilterChange?.('irrigation', e.target.value)}
           >
             <option value="">Toutes</option>
@@ -56,12 +57,14 @@ function Header({ onFilterChange, filters }) {
           </select>
         </div>
       </div>
-      
+
       <div className="header-actions">
-        <button className="btn-refresh" title="Actualiser les données">
+        {/* MODIFICATION : Ajout du onClick={onRefresh} */}
+        <button className="btn-refresh" onClick={onRefresh} title="Actualiser les données">
           🔄 Actualiser
         </button>
-        <button className="btn-export" title="Exporter les données">
+        {/* MODIFICATION : Ajout du onClick={onExport} */}
+        <button className="btn-export" onClick={onExport} title="Exporter les données">
           📥 Exporter
         </button>
       </div>

@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from database import get_sensor_data
+from app.database import get_sensor_data
 
 # --- 1. LE CERVEAU (Architecture du Réseau de Neurones) ---
 class LSTMModel(nn.Module):

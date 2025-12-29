@@ -1,149 +1,157 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MapView, Sidebar, Header, StatsBar } from '../../components';
 import { parcellesService, previsionsService, visionService, irrigationService } from '../../services';
-// SUPPRIMÉ : import { mockParcelles, mockPrevisions... } from '../../data/mockData';
 import './Dashboard.css';
 
 function Dashboard() {
-  // États pour les données
   const [parcelles, setParcelles] = useState(null);
   const [selectedParcelle, setSelectedParcelle] = useState(null);
   const [previsions, setPrevisions] = useState(null);
   const [visionResults, setVisionResults] = useState(null);
   const [irrigationData, setIrrigationData] = useState(null);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({ culture: '', etat: '', irrigation: '' });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [useMockData, setUseMockData] = useState(false); // Mode démo désactivé par défaut (car pas de mockData)
+  const [stats, setStats] = useState({ totalParcelles: 0, surfaceTotale: 0, parcellesCritiques: 0, irrigationUrgente: 0 });
 
-  // Statistiques
-  const [stats, setStats] = useState({
-    totalParcelles: 0,
-    surfaceTotale: 0,
-    parcellesCritiques: 0,
-    irrigationUrgente: 0,
-  });
-
-  // Chargement des parcelles
+  // --- FONCTION : CHARGEMENT DES PARCELLES (POSTGIS) ---
   const loadParcelles = useCallback(async () => {
     try {
       setLoading(true);
-      let data;
-
-      if (useMockData) {
-        // Utiliser les données de démo (VIDE POUR L'INSTANT)
-        data = { type: "FeatureCollection", features: [] };
-      } else {
-        // Appel API réel
-        // NOTE: Assure-toi que parcellesService gère les erreurs si l'API n'est pas encore prête
-        data = await parcellesService.getGeoJSON().catch(e => {
-          console.warn("API Parcelles non disponible, retour vide");
-          return { type: "FeatureCollection", features: [] };
-        });
-      }
-
+      const data = await parcellesService.getGeoJSON();
       setParcelles(data);
-
-      // Calculer les statistiques
       if (data?.features) {
-        const features = data.features;
         setStats({
-          totalParcelles: features.length,
-          surfaceTotale: features.reduce((acc, f) => acc + (f.properties?.surface || 0), 0),
-          parcellesCritiques: features.filter(f => f.properties?.etat === 'critique').length,
-          irrigationUrgente: features.filter(f => f.properties?.irrigationPrioritaire).length,
+          totalParcelles: data.features.length,
+          surfaceTotale: data.features.reduce((acc, f) => acc + (f.properties?.surface || 0), 0),
+          parcellesCritiques: 0,
+          irrigationUrgente: 0
         });
       }
-    } catch (err) {
-      console.error('Erreur chargement parcelles:', err);
-      setError('Impossible de charger les parcelles');
-      setParcelles({ type: "FeatureCollection", features: [] });
+    } catch (e) {
+      console.error("Erreur GeoJSON", e);
     } finally {
       setLoading(false);
     }
-  }, [useMockData]);
+  }, []);
 
-  // Chargement des détails quand une parcelle est sélectionnée
-  const loadParcelleDetails = useCallback(async (parcelleId) => {
+  // --- FONCTION : CHARGEMENT DÉTAILS (VISION & IRRIGATION) ---
+  const loadParcelleDetails = useCallback(async (pid) => {
+    const cleanId = String(pid).replace(/\D/g, '');
+    console.log("🚀 Lancement du chargement pour l'ID nettoyé:", cleanId);
+
     try {
-      if (useMockData) {
-        // Données de démo (VIDES)
-        setPrevisions([]);
-        setVisionResults([]);
-        setIrrigationData(null);
-      } else {
-        // Appels API parallèles
-        const [previsionsData, visionData, irrigationDataRes] = await Promise.all([
-          previsionsService.getByParcelle(parcelleId).catch(() => null),
-          visionService.getByParcelle(parcelleId).catch(() => null),
-          irrigationService.getByParcelle(parcelleId).catch(() => null),
-        ]);
+      const [vis, irrig] = await Promise.all([
+        visionService.getByParcelle(cleanId).catch(() => null),
+        irrigationService.getByParcelle(cleanId).catch(() => null),
+      ]);
 
-        setPrevisions(previsionsData);
-        setVisionResults(visionData);
-        setIrrigationData(irrigationDataRes);
+      console.log("✅ Données reçues du Backend:", { vis, irrig });
+
+      setVisionResults(vis);
+      setIrrigationData(irrig);
+
+      if (irrig) {
+        setPrevisions({
+          temperature: irrig.temperature,
+          humidite: irrig.humidite,
+          vent: irrig.vent
+        });
       }
     } catch (err) {
-      console.error('Erreur chargement détails parcelle:', err);
+      console.error('❌ Erreur lors du chargement des détails:', err);
     }
-  }, [useMockData]);
+  }, []);
 
-  // Chargement initial
+  // --- LOGIQUE DES BOUTONS (HEADER) ---
+
+  const handleRefresh = () => {
+    console.log("🔄 Actualisation globale demandée...");
+    setSelectedParcelle(null);
+    loadParcelles();
+  };
+
+  // 2. Bouton Exporter (Génère un fichier CSV réel)
+  const handleExport = () => {
+    if (!selectedParcelle || !irrigationData) {
+      alert("Veuillez sélectionner une parcelle avec des données pour exporter le rapport.");
+      return;
+    }
+
+    // Préparation des données pour le CSV
+    const rows = [
+      ["Champ", "Valeur"],
+      ["Nom de la parcelle", selectedParcelle.nom],
+      ["Culture", selectedParcelle.culture],
+      ["Surface (ha)", selectedParcelle.surface],
+      ["Temperature (°C)", irrigationData.temperature],
+      ["Humidite (%)", irrigationData.humidite],
+      ["Etat du sol", irrigationData.etat],
+      ["Indice NDVI", visionResults?.ndvi || "N/A"],
+      ["Sante Vegetale (%)", visionResults?.santeVegetale || "N/A"],
+      ["Conseil Irrigation", irrigationData.recommandation],
+      ["Date Export", new Date().toLocaleString()]
+    ];
+
+    // Création du contenu CSV
+    const csvContent = "data:text/csv;charset=utf-8,"
+      + rows.map(e => e.join(",")).join("\n");
+
+    // Création d'un lien de téléchargement invisible
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Rapport_AgroTrace_Parcelle_${selectedParcelle.id}.csv`);
+    document.body.appendChild(link);
+
+    // Déclenchement du téléchargement
+    link.click();
+    document.body.removeChild(link);
+
+    console.log("✅ Fichier CSV généré et téléchargé.");
+  };
+
+  // --- LOGIQUE DE FILTRAGE DYNAMIQUE ---
+  // On filtre les features GeoJSON avant de les envoyer à la MapView
+  const filteredParcelles = parcelles && parcelles.features ? {
+    ...parcelles,
+    features: parcelles.features.filter(f => {
+      // Filtre par Culture (Blé, Maïs, etc.)
+      const cultureMatch = !filters.culture || f.properties.culture === filters.culture;
+
+      // Filtre par État (Excellent, Bon, etc. - basé sur les properties PostGIS)
+      const etatMatch = !filters.etat || f.properties.etat === filters.etat;
+
+      return cultureMatch && etatMatch;
+    })
+  } : parcelles;
+
+  // --- EFFETS ---
   useEffect(() => {
     loadParcelles();
   }, [loadParcelles]);
 
-  // Chargement des détails quand une parcelle est sélectionnée
   useEffect(() => {
-    if (selectedParcelle?.id) {
-      loadParcelleDetails(selectedParcelle.id);
+    const pid = selectedParcelle?.id || selectedParcelle?.sensor_id;
+    if (pid) {
+      loadParcelleDetails(pid);
     }
-  }, [selectedParcelle, loadParcelleDetails]);
+  }, [selectedParcelle?.id, selectedParcelle?.sensor_id, loadParcelleDetails]);
 
-  // Gestion du clic sur une parcelle
-  const handleParcelleClick = (properties) => {
-    setSelectedParcelle(properties);
-  };
-
-  // Fermer le panneau latéral
-  const handleCloseSidebar = () => {
-    setSelectedParcelle(null);
-    setPrevisions(null);
-    setVisionResults(null);
-    setIrrigationData(null);
-  };
-
-  // Gestion des filtres
-  const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
-  };
-
-  // Filtrer les parcelles
-  const getFilteredParcelles = () => {
-    if (!parcelles?.features || Object.keys(filters).every(k => !filters[k])) {
-      return parcelles;
-    }
-
-    return {
-      ...parcelles,
-      features: parcelles.features.filter(feature => {
-        const props = feature.properties;
-        if (filters.culture && props.culture !== filters.culture) return false;
-        if (filters.etat && props.etat !== filters.etat) return false;
-        if (filters.irrigation && props.irrigationPriorite !== filters.irrigation) return false;
-        return true;
-      })
-    };
+  // --- HANDLERS ---
+  const handleParcelleClick = (props) => {
+    console.log("🖱️ Clic détecté sur:", props);
+    const rawId = props.id || props.sensor_id;
+    const cleanId = String(rawId).replace(/\D/g, '');
+    setSelectedParcelle({ ...props, id: cleanId });
   };
 
   return (
     <div className="dashboard">
       <Header
         filters={filters}
-        onFilterChange={handleFilterChange}
+        onFilterChange={(n, v) => setFilters(p => ({ ...p, [n]: v }))}
+        onRefresh={handleRefresh}
+        onExport={handleExport}
       />
 
       <StatsBar stats={stats} />
@@ -153,19 +161,10 @@ function Dashboard() {
           {loading && (
             <div className="loading-overlay">
               <div className="loading-spinner"></div>
-              <p>Chargement des données...</p>
             </div>
           )}
-
-          {error && !parcelles && (
-            <div className="error-message">
-              <p>⚠️ {error}</p>
-              <button onClick={loadParcelles}>Réessayer</button>
-            </div>
-          )}
-
           <MapView
-            parcelles={getFilteredParcelles()}
+            parcelles={filteredParcelles} // On passe les données filtrées
             onParcelleClick={handleParcelleClick}
             selectedParcelle={selectedParcelle}
           />
@@ -176,12 +175,9 @@ function Dashboard() {
           previsions={previsions}
           visionResults={visionResults}
           irrigationData={irrigationData}
-          onClose={handleCloseSidebar}
+          onClose={() => setSelectedParcelle(null)}
         />
       </div>
-
-      {/* Toggle mode démo (Désactivé pour l'instant car pas de mockData) */}
-      {/* <div className="demo-toggle"> ... </div> */}
     </div>
   );
 }
