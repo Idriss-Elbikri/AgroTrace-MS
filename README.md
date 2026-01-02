@@ -68,6 +68,7 @@ La plateforme repose sur une architecture **microservices** interconnectée via 
 
 ### Modèle Utilisé
 VisionPlant : https://www.kaggle.com/code/idrissbk/visionplant
+
 PrevisionEau : https://github.com/yahia951/PrevisionEau/blob/main/PrevisionEau/notebooks/train_model.ipynb
 
 ### Lancement de l’infrastructure
