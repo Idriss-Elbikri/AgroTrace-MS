@@ -77,10 +77,10 @@ PrevisionEau : https://github.com/yahia951/PrevisionEau/blob/main/PrevisionEau/n
 git clone [url-du-depot]
 cd AgroTrace-MS
 docker-compose up -d --build
+```
 
 
-
-Fonctionnalités principales
+### Fonctionnalités principales
 
 🗺️ Visualisation SIG
 Cartographie interactive des parcelles avec état de santé codé par couleur
@@ -93,3 +93,7 @@ Calcul automatique du volume d’irrigation requis par m² via le moteur Drools
 
 🚁 Analyse Drone
 Alertes basées sur l’indice NDVI pour détecter précocement les carences végétales
+
+
+### Lien Trello Pour plus de detaille
+https://trello.com/invite/b/692c556929bf2aef53a13daf/ATTI75ef62a61a164cd3127815381b422b7271AABAA0/project-management-of-agrotrace-ms
