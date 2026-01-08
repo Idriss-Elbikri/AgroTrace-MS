@@ -97,3 +97,7 @@ Alertes basées sur l’indice NDVI pour détecter précocement les carences vé
 
 ### Lien Trello Pour plus de detaille
 https://trello.com/invite/b/692c556929bf2aef53a13daf/ATTI75ef62a61a164cd3127815381b422b7271AABAA0/project-management-of-agrotrace-ms
+
+### Demonstration par Video
+
+https://drive.google.com/file/d/1DJXFzpBgkw26vjI0PYr_zrbUYCCfSvNp/view?usp=sharing
